@@ -31,7 +31,7 @@ def info(
 def scout(
     session: zenoh.Session, parser: argparse.ArgumentParser, args: argparse.Namespace
 ):
-    result = zenoh.scout(what=args.what, timeout=args.timeout)
+    result = zenoh.scout(what=args.what)
     for received in result.receiver():
         logger.info(received)
 
@@ -151,13 +151,14 @@ def network(
     graph = nx.Graph()
 
     # Scout the nearby network
-    for answer in zenoh.scout(what="peer|client", timeout=1.0).receiver():
+    for answer in zenoh.scout():
         graph.add_node(str(answer.zid), whatami=str(answer.whatami))
 
     # Query routers for more information
-    for response in session.get("@/router/*", zenoh.Queue()):
-        if response.is_ok:
-            data = json.loads(response.ok.payload)
+    for response in session.get("@/*/router"):
+        if response.ok:
+            print(response.ok.payload.deserialize(str))
+            data = json.loads(response.ok.payload.deserialize(str))
 
             # Start adding edges and nodes
             zid = data["zid"]
@@ -190,7 +191,7 @@ def network(
         for node, attrs in graph.nodes.items()
         if attrs["whatami"] in ("peer", "client")
     ]
-    me = str(session.info().zid())
+    me = str(session.info.zid())
 
     # Node labels
     labels = {
@@ -443,7 +444,7 @@ def main():
     )
     logging.captureWarnings(True)
     warnings.filterwarnings("once")
-    zenoh.init_logger()
+    zenoh.try_init_log_from_env()
 
     # Load the plugins
     load_plugins(plugin_encoders, plugin_decoders)
@@ -455,11 +456,11 @@ def main():
         else zenoh.Config()
     )
     if args.mode is not None:
-        conf.insert_json5(zenoh.config.MODE_KEY, json.dumps(args.mode))
+        conf.insert_json5("mode", json.dumps(args.mode))
     if args.connect is not None:
-        conf.insert_json5(zenoh.config.CONNECT_KEY, json.dumps(args.connect))
+        conf.insert_json5("connect/endpoints", json.dumps(args.connect))
     if args.listen is not None:
-        conf.insert_json5(zenoh.config.LISTEN_KEY, json.dumps(args.listen))
+        conf.insert_json5("listen", json.dumps(args.listen))
 
     ## Construct session
     logger.info("Opening Zenoh session...")
